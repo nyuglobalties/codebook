@@ -15,23 +15,31 @@ codebook_table <- function(results) {
   metadata <- gather_variable_metadata(results)
 
   metadata <- dplyr::left_join(metadata,
-                               skimmed,
-                               by = c("name" = "skim_variable"))
-  order <- c("name", "label", "type", "type_options", "data_type", "ordered",
-             "value_labels",  "optional", "showif",
-             "scale_item_names",
-             "value", "item_order", "block_order", "class",
-             "n_missing", "complete_rate", "n_unique", "empty",
-             "top_counts", "count", "min",  "median", "max",
-             "mean", "sd", "whitespace", "n_value_labels", "hist")
-  not_all_na <- function(x) { !all(is.na(x)) && !is.null(unlist(x)) }
-  cols <- setdiff(union(
-    intersect(order, names(metadata)), # order
-    setdiff(names(metadata), order)), # include other cols
-    c("choice_list"))
+    skimmed,
+    by = c("name" = "skim_variable")
+  )
+  order <- c(
+    "name", "label", "type", "type_options", "data_type", "ordered",
+    "value_labels", "optional", "showif",
+    "scale_item_names",
+    "value", "item_order", "block_order", "class",
+    "n_missing", "complete_rate", "n_unique", "empty",
+    "top_counts", "count", "min", "median", "max",
+    "mean", "sd", "whitespace", "n_value_labels", "hist"
+  )
+  not_all_na <- function(x) {
+    !all(is.na(x)) && !is.null(unlist(x))
+  }
+  cols <- setdiff(
+    union(
+      intersect(order, names(metadata)), # order
+      setdiff(names(metadata), order)
+    ), # include other cols
+    c("choice_list")
+  )
 
-  metadata <- dplyr::select(metadata,  !!!cols)
-  metadata <- dplyr::select_if(metadata, not_all_na )
+  metadata <- dplyr::select(metadata, !!!cols)
+  metadata <- dplyr::select_if(metadata, not_all_na)
   if (!exists("label", metadata)) {
     metadata$label <- NA_character_
   }
@@ -47,6 +55,10 @@ gather_variable_metadata <- function(results) {
 
 attribute_summary <- function(var) {
   x <- attributes(var)
+
+  # Exclude blueprintr annotations
+  x <- x[!grepl("^bpr\\.", names(x))]
+
   if (is.null(x)) {
     return(data.frame(label = NA_character_, stringsAsFactors = FALSE))
   }
@@ -68,17 +80,19 @@ attribute_summary <- function(var) {
   }
   if (exists("levels", x)) {
     x$value_labels <- paste(paste0(seq_len(length(x$levels)), ". ", x$levels),
-                            collapse = ",\n")
+      collapse = ",\n"
+    )
     x$levels <- NULL
     # remove extremely deep qualtrics choices attributes
-    if (exists("item", x) && exists("choices", x$item)
-        && exists("variableName", x$item$choices[[1]])) {
+    if (exists("item", x) && exists("choices", x$item) &&
+      exists("variableName", x$item$choices[[1]])) {
       x$item$choices <- NULL
     }
   } else if (exists("labels", x)) {
     if (!is.null(names(x$labels))) {
       x$value_labels <- paste(paste0(x$labels, ". ", names(x$labels)),
-                              collapse = ",\n")
+        collapse = ",\n"
+      )
     } else {
       x$value_labels <- paste(x$labels, collapse = ",\n")
     }
@@ -117,33 +131,42 @@ get_skimmers.haven_labelled <- function(column) {
 haven_labelled_sfl <- skimr::sfl(
   skim_type = "haven_labelled",
   mean = ~ ifelse(typeof(.) != "character",
-                  mean(., na.rm = TRUE),
-                  NA_real_),
+    mean(., na.rm = TRUE),
+    NA_real_
+  ),
   sd = ~ ifelse(typeof(.) != "character",
-                sd(., na.rm = TRUE),
-                NA_real_),
+    sd(., na.rm = TRUE),
+    NA_real_
+  ),
   min = ~ ifelse(typeof(.) != "character",
-                 min(vctrs::vec_data(.), na.rm = TRUE),
-                 skimr::get_one_default_skimmer("character")$min(.)),
+    min(vctrs::vec_data(.), na.rm = TRUE),
+    skimr::get_one_default_skimmer("character")$min(.)
+  ),
   median = ~ ifelse(typeof(.) != "character",
-                    stats::median(., na.rm = TRUE),
-                    NA_real_),
+    stats::median(., na.rm = TRUE),
+    NA_real_
+  ),
   max = ~ ifelse(typeof(.) != "character",
-                 max(vctrs::vec_data(.), na.rm = TRUE),
-                 skimr::get_one_default_skimmer("character")$max(.)),
+    max(vctrs::vec_data(.), na.rm = TRUE),
+    skimr::get_one_default_skimmer("character")$max(.)
+  ),
   empty = ~ ifelse(typeof(.) != "character",
-                   NA_integer_,
-                   skimr::get_one_default_skimmer("character")$empty(.)),
+    NA_integer_,
+    skimr::get_one_default_skimmer("character")$empty(.)
+  ),
   n_unique = ~ ifelse(typeof(.) != "character",
-                      NA_integer_,
-                      skimr::get_one_default_skimmer("character")$n_unique(.)),
+    NA_integer_,
+    skimr::get_one_default_skimmer("character")$n_unique(.)
+  ),
   whitespace = ~ ifelse(typeof(.) != "character",
-                        NA_integer_,
-                        skimr::get_one_default_skimmer("character")$whitespace(.)),
+    NA_integer_,
+    skimr::get_one_default_skimmer("character")$whitespace(.)
+  ),
   n_value_labels = ~ length(labelled::val_labels(.)),
   hist = ~ ifelse(typeof(.) != "character",
-                  skimr::inline_hist(.),
-                  NA_character_),
+    skimr::inline_hist(.),
+    NA_character_
+  ),
 )
 #' Define skimmers for haven_labelled_spss variables
 #'
@@ -171,7 +194,7 @@ get_skimmers.haven_labelled_spss <- function(column) {
 #' @examples
 #' skim_codebook(bfi)
 skim_codebook <- function(data, ...) {
-    skimr::skim_with(
+  skimr::skim_with(
     haven_labelled = haven_labelled_sfl,
     haven_labelled_spss = haven_labelled_sfl,
     numeric = skimr::sfl(
@@ -196,56 +219,71 @@ coerce_skimmed_summary_to_character <- function(df) {
   }
   if (exists("POSIXct", df)) {
     df$POSIXct <-
-      dplyr::mutate_at(df$POSIXct,
-                       dplyr::vars(.data$min, .data$median, .data$max),
-                       as_character)
+      dplyr::mutate_at(
+        df$POSIXct,
+        dplyr::vars(.data$min, .data$median, .data$max),
+        as_character
+      )
   }
   if (exists("Date", df)) {
     df$Date <-
-      dplyr::mutate_at(df$Date,
-                       dplyr::vars(.data$min, .data$median, .data$max),
-                       as_character)
+      dplyr::mutate_at(
+        df$Date,
+        dplyr::vars(.data$min, .data$median, .data$max),
+        as_character
+      )
   }
   if (exists("difftime", df)) {
     df$difftime <-
-      dplyr::mutate_at(df$difftime,
-                       dplyr::vars(.data$min, .data$median, .data$max),
-                       as_character)
+      dplyr::mutate_at(
+        df$difftime,
+        dplyr::vars(.data$min, .data$median, .data$max),
+        as_character
+      )
   }
   if (exists("ts", df)) {
     df$ts <-
-      dplyr::mutate_at(df$ts,
-                       dplyr::vars(.data$min, .data$median, .data$max),
-                       as_character)
+      dplyr::mutate_at(
+        df$ts,
+        dplyr::vars(.data$min, .data$median, .data$max),
+        as_character
+      )
   }
   if (exists("numeric", df)) {
     df$numeric <-
-      dplyr::mutate_at(df$numeric,
-                       dplyr::vars(.data$min, .data$median, .data$max),
-                       format_digits)
+      dplyr::mutate_at(
+        df$numeric,
+        dplyr::vars(.data$min, .data$median, .data$max),
+        format_digits
+      )
   }
   if (exists("character", df)) {
     df$character <-
-      dplyr::mutate_at(df$character,
-                       dplyr::vars(.data$min, .data$max),
-                       as_character)
+      dplyr::mutate_at(
+        df$character,
+        dplyr::vars(.data$min, .data$max),
+        as_character
+      )
   }
   if (exists("haven_labelled", df)) {
     df$haven_labelled <-
-      dplyr::mutate_at(df$haven_labelled,
-                       dplyr::vars(.data$min, .data$median, .data$max),
-                     format_digits)
+      dplyr::mutate_at(
+        df$haven_labelled,
+        dplyr::vars(.data$min, .data$median, .data$max),
+        format_digits
+      )
   }
   class(df) <- "list"
   df
 }
 
-skim_to_wide_labelled <- function(x){
+skim_to_wide_labelled <- function(x) {
   results <- dplyr::bind_rows(
     coerce_skimmed_summary_to_character(
-    skimr::partition(skim_codebook(x))
-    ), .id = "data_type"
-    )
+      skimr::partition(skim_codebook(x))
+    ),
+    .id = "data_type"
+  )
   results <- tibble::as_tibble(results)
   results
 }
