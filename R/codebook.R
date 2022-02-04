@@ -439,9 +439,8 @@ escaped_table <- function(metadata_table) {
   }
 
   tab <- kableExtra::kbl(metadata_table, escape = FALSE)
-  tab <- kableExtra::kable_styling(
+  tab <- kableExtra::kable_paper(
     tab,
-    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
     fixed_thead = TRUE
   )
   kableExtra::scroll_box(tab)
