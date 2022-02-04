@@ -1,7 +1,7 @@
 .data <- rlang::.data
 
 no_md <- function() {
-  knitr::asis_output('')
+  knitr::asis_output("")
 }
 
 #' Generate rmarkdown codebook
@@ -35,35 +35,42 @@ no_md <- function() {
 #' md <- codebook(bfi, survey_repetition = "single", metadata_table = FALSE)
 #' }
 codebook <- function(results, reliabilities = NULL,
-    survey_repetition = c('auto', 'single', 'repeated_once', 'repeated_many'),
-    detailed_variables = TRUE,
-    detailed_scales = TRUE,
-    survey_overview = TRUE,
-    missingness_report = TRUE, metadata_table = TRUE,
-    metadata_json = TRUE, indent = '#') {
+                     survey_repetition = c("auto", "single", "repeated_once", "repeated_many"),
+                     detailed_variables = TRUE,
+                     detailed_scales = TRUE,
+                     survey_overview = TRUE,
+                     missingness_report = TRUE, metadata_table = TRUE,
+                     metadata_json = TRUE, indent = "#") {
   # todo: factor out the time stuff
   # todo: factor out the repetition detection stuff
   survey_repetition <- match.arg(survey_repetition)
   if (survey_repetition == "auto") {
     if (!is_formr_survey(results)) {
-      survey_repetition <- 'single'
+      survey_repetition <- "single"
     } else {
       users <- dplyr::n_distinct(results$session)
-      rows_per_user <- nrow(results)/users
+      rows_per_user <- nrow(results) / users
 
       dupes <- sum(duplicated(
-        dplyr::select(results, .data$session, .data$created)))
+        dplyr::select(results, .data$session, .data$created)
+      ))
       if (dupes > 0) {
-        stop("There seem to be ", dupes, " duplicated rows in this survey ",
-             "(duplicate session-created combinations)")
+        stop(
+          "There seem to be ", dupes, " duplicated rows in this survey ",
+          "(duplicate session-created combinations)"
+        )
       }
-      rows_by_user <- dplyr::count(dplyr::filter(results, !is.na(.data$ended)),
-                                   .data$session)$n
-      survey_repetition <- ifelse( rows_per_user <= 1,
-                                  "single",
-                                  ifelse(rows_by_user %in% 1:2,
-                                         "repeated_once",
-                                         "repeated_many"))
+      rows_by_user <- dplyr::count(
+        dplyr::filter(results, !is.na(.data$ended)),
+        .data$session
+      )$n
+      survey_repetition <- ifelse(rows_per_user <= 1,
+        "single",
+        ifelse(rows_by_user %in% 1:2,
+          "repeated_once",
+          "repeated_many"
+        )
+      )
     }
   }
 
@@ -74,8 +81,8 @@ codebook <- function(results, reliabilities = NULL,
   df_name <- deparse(substitute(results))
   df_name <- safe_name(df_name)
 
-  old_opt <- options('knitr.duplicate.label')$knitr.duplicate.label
-  options(knitr.duplicate.label = 'allow')
+  old_opt <- options("knitr.duplicate.label")$knitr.duplicate.label
+  options(knitr.duplicate.label = "allow")
   on.exit(options(knitr.duplicate.label = old_opt))
   options <- list(
     fig.path =
@@ -85,12 +92,23 @@ codebook <- function(results, reliabilities = NULL,
   )
   on.exit(options(knitr.duplicate.label = old_opt))
   optc <- knitr::opts_chunk$get(names(options), drop = FALSE)
-  on.exit({
-    for (i in names(options)) if (identical(options[[i]],
-                    knitr::opts_chunk$get(i))) knitr::opts_chunk$set(optc[i])
-  }, add = TRUE)
-  knitr::opts_chunk$set(fig.path = options$fig.path,
-                        cache.path = options$cache.path)
+  on.exit(
+    {
+      for (i in names(options)) {
+        if (identical(
+          options[[i]],
+          knitr::opts_chunk$get(i)
+        )) {
+          knitr::opts_chunk$set(optc[i])
+        }
+      }
+    },
+    add = TRUE
+  )
+  knitr::opts_chunk$set(
+    fig.path = options$fig.path,
+    cache.path = options$cache.path
+  )
 
   meta <- metadata(results)
   if (is.null(meta)) {
@@ -129,38 +147,55 @@ codebook <- function(results, reliabilities = NULL,
   if (detailed_scales) {
     for (i in seq_along(vars)) {
       var <- vars[i]
-      scale <- results[[ var ]]
+      scale <- results[[var]]
       scale_info <- attributes(scale)
-      if ( !is.null(scale_info) && exists("scale_item_names", scale_info)) {
-        items_contained_in_scales <- c(items_contained_in_scales,
-                                       scale_info$scale_item_names, var)
-        items <- dplyr::select(results,
-                    !!!scale_info$scale_item_names)
+      if (!is.null(scale_info) && exists("scale_item_names", scale_info)) {
+        items_contained_in_scales <- c(
+          items_contained_in_scales,
+          scale_info$scale_item_names, var
+        )
+        items <- dplyr::select(
+          results,
+          !!!scale_info$scale_item_names
+        )
         scales_items[[var]] %<-% {
-          tryCatch({
-          codebook_component_scale(
-            scale = scale, scale_name = var,
-            items = items,
-            reliabilities = reliabilities[[var]], indent = indent) },
-        error = function(e) stop("Could not summarise scale ", var, ". ", e)) }
+          tryCatch(
+            {
+              codebook_component_scale(
+                scale = scale, scale_name = var,
+                items = items,
+                reliabilities = reliabilities[[var]], indent = indent
+              )
+            },
+            error = function(e) stop("Could not summarise scale ", var, ". ", e)
+          )
+        }
       }
     }
   }
 
   if (detailed_variables) {
-    dont_show_these <- c(items_contained_in_scales,
-                         c("session", "created", "modified", "expired", "ended"))
+    dont_show_these <- c(
+      items_contained_in_scales,
+      c("session", "created", "modified", "expired", "ended")
+    )
     for (i in seq_along(vars)) {
       var <- vars[i]
-      item <- results[[ var ]]
+      item <- results[[var]]
       if (var %in% dont_show_these) {
         next # don't do scales again
       } else {
-        scales_items[[var]] %<-% {tryCatch({
-                        codebook_component_single_item( item = item,
-                                item_name = var, indent = indent ) },
-        error = function(e) stop("Could not summarise item ", var, ". ", e)) }
-
+        scales_items[[var]] %<-% {
+          tryCatch(
+            {
+              codebook_component_single_item(
+                item = item,
+                item_name = var, indent = indent
+              )
+            },
+            error = function(e) stop("Could not summarise item ", var, ". ", e)
+          )
+        }
       }
     }
   }
@@ -206,13 +241,15 @@ codebook <- function(results, reliabilities = NULL,
 #' compact_codebook(bfi)
 #' }
 compact_codebook <- function(results) {
-  codebook(results, reliabilities = list(),
-            survey_repetition = 'single',
-                       detailed_variables = FALSE,
-                       detailed_scales = FALSE,
-                       survey_overview = FALSE,
-                       missingness_report = FALSE, metadata_table = TRUE,
-                       metadata_json = TRUE, indent = '#')
+  codebook(results,
+    reliabilities = list(),
+    survey_repetition = "single",
+    detailed_variables = FALSE,
+    detailed_scales = FALSE,
+    survey_overview = FALSE,
+    missingness_report = FALSE, metadata_table = TRUE,
+    metadata_json = TRUE, indent = "#"
+  )
 }
 
 
@@ -244,15 +281,18 @@ codebook_survey_overview <- function(results, survey_repetition = "single",
   # stopifnot(is(results$ended, "POSIXct"))
 
   users <- dplyr::n_distinct(results$session)
-  finished_users <- dplyr::n_distinct(results[!is.na(results$ended),]$session)
-  rows_per_user <- nrow(results)/users
-  rows_by_user <- dplyr::count(dplyr::filter(results, !is.na(.data$ended)),
-                               .data$session)$n
+  finished_users <- dplyr::n_distinct(results[!is.na(results$ended), ]$session)
+  rows_per_user <- nrow(results) / users
+  rows_by_user <- dplyr::count(
+    dplyr::filter(results, !is.na(.data$ended)),
+    .data$session
+  )$n
 
   duration <- dplyr::mutate(dplyr::filter(results, !is.na(ended)),
-              duration = as.double(.data$ended - .data$created, unit = "mins"))
+    duration = as.double(.data$ended - .data$created, unit = "mins")
+  )
   upper_limit <- stats::median(duration$duration) +
-                          4*stats::mad(duration$duration)
+    4 * stats::mad(duration$duration)
   high_vals <- sum(upper_limit < duration$duration)
   if (high_vals == 0) {
     upper_limit <- max(duration$duration)
@@ -267,7 +307,8 @@ codebook_survey_overview <- function(results, survey_repetition = "single",
   only_viewed <- sum(is.na(results$ended) & is.na(results$modified))
 
   rmdpartials::partial(require_file("inst/_codebook_survey_overview.Rmd"),
-                  name = "overview_", render_preview = FALSE)
+    name = "overview_", render_preview = FALSE
+  )
 }
 
 #' Codebook data info
@@ -285,11 +326,12 @@ codebook_survey_overview <- function(results, survey_repetition = "single",
 #' metadata(bfi)$description <- "a small mock Big Five Inventory dataset"
 #' metadata(bfi)$citation <- "doi:10.5281/zenodo.1326520"
 #' metadata(bfi)$url <-
-#'    "https://rubenarslan.github.io/codebook/articles/codebook.html"
+#'   "https://rubenarslan.github.io/codebook/articles/codebook.html"
 #' codebook_data_info(bfi)
 codebook_data_info <- function(results, indent = "##") {
   rmdpartials::partial(require_file("inst/_codebook_data_info.Rmd"),
-                  name = "data_info_", render_preview = FALSE)
+    name = "data_info_", render_preview = FALSE
+  )
 }
 
 
@@ -308,7 +350,8 @@ codebook_data_info <- function(results, indent = "##") {
 codebook_missingness <- function(results, indent = "##") {
   md_pattern <- md_pattern(results)
   rmdpartials::partial(require_file("inst/_codebook_missingness.Rmd"),
-                       name = "missingness_", render_preview = FALSE)
+    name = "missingness_", render_preview = FALSE
+  )
 }
 
 
@@ -326,7 +369,8 @@ codebook_missingness <- function(results, indent = "##") {
 metadata_jsonld <- function(results) {
   jsonld_metadata <- metadata_list(results)
   rmdpartials::partial(require_file("inst/_metadata_jsonld.Rmd"),
-                       name = "metadata_", render_preview = FALSE)
+    name = "metadata_", render_preview = FALSE
+  )
 }
 
 
@@ -349,40 +393,57 @@ metadata_jsonld <- function(results) {
 codebook_items <- function(results, indent = "##") {
   metadata_table <- codebook_table(results)
   metadata_table <- dplyr::mutate(metadata_table,
-         name = paste0('<a href="#', safe_name(.data$name), '">',
-                       recursive_escape(.data$name), '</a>'))
+    name = paste0(
+      '<a href="#', safe_name(.data$name), '">',
+      recursive_escape(.data$name), "</a>"
+    )
+  )
 
   # bit ugly to suppress warnings here, but necessary for escaping whatever
   # columns there may be
   suppressWarnings(
-    metadata_table <- dplyr::mutate_at(metadata_table, dplyr::vars(
-    dplyr::one_of("label", "scale_item_names", "value_labels", "showif")),
-    recursive_escape) )
+    metadata_table <- dplyr::mutate_at(
+      metadata_table, dplyr::vars(
+        dplyr::one_of("label", "scale_item_names", "value_labels", "showif")
+      ),
+      recursive_escape
+    )
+  )
 
   if (exists("value_labels", metadata_table)) {
     metadata_table$value_labels <- stringr::str_replace_all(
-      metadata_table$value_labels, "\n", "<br>")
+      metadata_table$value_labels, "\n", "<br>"
+    )
   }
   if (exists("label", metadata_table)) {
     metadata_table$label <- stringr::str_replace_all(
-      metadata_table$label, "\n", "<br>")
+      metadata_table$label, "\n", "<br>"
+    )
   }
 
   rmdpartials::partial(require_file("inst/_codebook_items.Rmd"),
-                       name = "items_", render_preview = FALSE)
+    name = "items_", render_preview = FALSE
+  )
 }
 
 escaped_table <- function(metadata_table) {
   if (exists("value_labels", metadata_table)) {
     metadata_table$value_labels <- stringr::str_replace_all(
-      metadata_table$value_labels, "\n", "<br>")
+      metadata_table$value_labels, "\n", "<br>"
+    )
   }
   if (exists("label", metadata_table)) {
     metadata_table$label <- stringr::str_replace_all(
-      metadata_table$label, "\n", "<br>")
+      metadata_table$label, "\n", "<br>"
+    )
   }
 
-  knitr::kable(metadata_table, escape = FALSE)
+  tab <- kableExtra::kbl(metadata_table)
+  kableExtra::kable_styling(
+    tab,
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    fixed_thead = TRUE
+  )
 }
 
 #' Codebook component for scales
@@ -399,27 +460,31 @@ escaped_table <- function(metadata_table) {
 #' # will generate figures in a temporary directory
 #' \dontrun{
 #' data("bfi")
-#' bfi <- bfi[,c("BFIK_open", paste0("BFIK_open_", 1:4))]
-#' codebook_component_scale(bfi[,1], "BFIK_open", bfi[,-1],
-#'    reliabilities = list(BFIK_open = psych::alpha(bfi[,-1])))
+#' bfi <- bfi[, c("BFIK_open", paste0("BFIK_open_", 1:4))]
+#' codebook_component_scale(bfi[, 1], "BFIK_open", bfi[, -1],
+#'   reliabilities = list(BFIK_open = psych::alpha(bfi[, -1]))
+#' )
 #' }
 codebook_component_scale <- function(scale,
                                      scale_name = deparse(substitute(scale)),
                                      items, reliabilities = list(),
-                                     indent = '##') {
-  stopifnot( exists("scale_item_names", attributes(scale)))
-  stopifnot( attributes(scale)$scale_item_names %in% names(items) )
-  items <- dplyr::select(items,
-                         !!!attributes(scale)$scale_item_names)
+                                     indent = "##") {
+  stopifnot(exists("scale_item_names", attributes(scale)))
+  stopifnot(attributes(scale)$scale_item_names %in% names(items))
+  items <- dplyr::select(
+    items,
+    !!!attributes(scale)$scale_item_names
+  )
 
   safe_name <- safe_name(scale_name)
 
-  old_opt <- options('knitr.duplicate.label')$knitr.duplicate.label
+  old_opt <- options("knitr.duplicate.label")$knitr.duplicate.label
   on.exit(options(knitr.duplicate.label = old_opt))
-  options(knitr.duplicate.label = 'allow')
+  options(knitr.duplicate.label = "allow")
 
   rmdpartials::partial(require_file("inst/_codebook_scale.Rmd"),
-                       name = safe_name, render_preview = FALSE)
+    name = safe_name, render_preview = FALSE
+  )
 }
 
 #' Codebook component for single items
@@ -436,12 +501,14 @@ codebook_component_scale <- function(scale,
 #' codebook_component_single_item(bfi$BFIK_open_1, "BFIK_open_1")
 #' }
 codebook_component_single_item <- function(item,
-                                           item_name = deparse(substitute(item)), indent = '##') {
+                                           item_name = deparse(substitute(item)), indent = "##") {
   safe_name <- paste0(
     knitr::opts_chunk$get("fig.path"),
-    safe_name(item_name), "_")
+    safe_name(item_name), "_"
+  )
   safe_name <- safe_name(item_name)
 
   rmdpartials::partial(require_file("inst/_codebook_item.Rmd"),
-                       name = safe_name, render_preview = FALSE)
+    name = safe_name, render_preview = FALSE
+  )
 }
