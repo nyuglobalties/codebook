@@ -142,7 +142,6 @@ codebook <- function(results, reliabilities = NULL,
   scales_items <- new.env()
   vars <- names(results)
   items_contained_in_scales <- c()
-  `%<-%` <- future::`%<-%`
 
   if (detailed_scales) {
     for (i in seq_along(vars)) {
@@ -158,7 +157,8 @@ codebook <- function(results, reliabilities = NULL,
           results,
           !!!scale_info$scale_item_names
         )
-        scales_items[[var]] %<-% {
+        # TODO: profile and maybe parallelize with furrr
+        scales_items[[var]] <- {
           tryCatch(
             {
               codebook_component_scale(
@@ -185,7 +185,8 @@ codebook <- function(results, reliabilities = NULL,
       if (var %in% dont_show_these) {
         next # don't do scales again
       } else {
-        scales_items[[var]] %<-% {
+        # TODO: profile and maybe parallelize with furrr
+        scales_items[[var]] <- {
           tryCatch(
             {
               codebook_component_single_item(

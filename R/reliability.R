@@ -19,12 +19,7 @@
 #' bfi <- bfi %>% dplyr::select(dplyr::starts_with("BFIK_agree"))
 #' reliabilities <- compute_reliabilities(bfi)
 #' }
-
 compute_reliabilities <- function(results, survey_repetition = "single") {
-  if (requireNamespace("future", quietly = TRUE)) {
-    `%<-%` <- future::`%<-%`
-  }
-
   vars <- names(results)
   reliabilities <- new.env()
 
@@ -32,38 +27,45 @@ compute_reliabilities <- function(results, survey_repetition = "single") {
     var <- vars[i]
     scale_info <- attributes(results[[var]])
     if (!is.null(scale_info) && exists("scale_item_names", scale_info)) {
-      if (!requireNamespace("future", quietly = TRUE)) {
-        stop("Package \"future\" needed to compute reliabilites.",
-             call. = FALSE)
-      }
-
-      reliabilities[[ var ]] %<-% {
+      # TODO: profile and maybe parallelize with furrr
+      reliabilities[[var]] <- {
         id_vars <- c("session", "created")
         id_vars <- intersect(id_vars, vars)
         scale_info$scale_item_names <- unname(scale_info$scale_item_names)
-        items <- dplyr::select(results,
-                               !!!id_vars,
-                               !!var,
-                               !!!scale_info$scale_item_names)
+        items <- dplyr::select(
+          results,
+          !!!id_vars,
+          !!var,
+          !!!scale_info$scale_item_names
+        )
 
-        tryCatch({
-          compute_appropriate_reliability(var, scale_info,
-                                          items,
-                                          survey_repetition, ci = TRUE)
-        }, error = function(e) {
-          tryCatch({
-            warning("Reliability CIs could not be computed for ", var)
-            warning(conditionMessage(e))
+        tryCatch(
+          {
             compute_appropriate_reliability(var, scale_info,
-                                          items,
-                                          survey_repetition, ci = FALSE)
-          }, error = function(e) {
-            warning("Reliability could not be computed for ", var)
-            warning(conditionMessage(e))
-            NULL
-          })
-
-        })
+              items,
+              survey_repetition,
+              ci = TRUE
+            )
+          },
+          error = function(e) {
+            tryCatch(
+              {
+                warning("Reliability CIs could not be computed for ", var)
+                warning(conditionMessage(e))
+                compute_appropriate_reliability(var, scale_info,
+                  items,
+                  survey_repetition,
+                  ci = FALSE
+                )
+              },
+              error = function(e) {
+                warning("Reliability could not be computed for ", var)
+                warning(conditionMessage(e))
+                NULL
+              }
+            )
+          }
+        )
       }
     }
   }
@@ -74,84 +76,107 @@ compute_reliabilities <- function(results, survey_repetition = "single") {
 compute_appropriate_reliability <- function(scale_name, scale_info,
                                             results, survey_repetition,
                                             ci = TRUE,
-  give_me_alpha_even_if_its_strictly_inferior = FALSE) {
+                                            give_me_alpha_even_if_its_strictly_inferior = FALSE) {
   scale_item_names <- scale_info$scale_item_names
   if (give_me_alpha_even_if_its_strictly_inferior) {
     internal_consistency <- function(data, scale_name) {
       if (!requireNamespace("psych", quietly = TRUE)) {
         stop("Package \"psych\" needed to compute reliabilites.",
-             call. = FALSE)
+          call. = FALSE
+        )
       }
       psych::alpha(as.data.frame(data),
-                   title = scale_name, check.keys = FALSE)
+        title = scale_name, check.keys = FALSE
+      )
     }
   } else {
     if (!suppressMessages(
-      requireNamespace("ufs", quietly = TRUE))) {
+      requireNamespace("ufs", quietly = TRUE)
+    )) {
       stop("Package \"ufs\" needed to compute reliabilites.",
-           call. = FALSE)
+        call. = FALSE
+      )
     }
 
     internal_consistency <- function(data, scale_name) {
       suppressWarnings(
         ufs::scaleDiagnosis(data,
-          scaleReliability.ci = ci))
+          scaleReliability.ci = ci
+        )
+      )
     }
   }
 
-  if (survey_repetition == 'single') {
-      list(
-        internal_consistency =
-          internal_consistency(results[, scale_item_names], scale_name)
-      )
-  } else if (survey_repetition == 'repeated_once') {
+  if (survey_repetition == "single") {
+    list(
+      internal_consistency =
+        internal_consistency(results[, scale_item_names], scale_name)
+    )
+  } else if (survey_repetition == "repeated_once") {
     if (!suppressMessages(
-      requireNamespace("userfriendlyscience", quietly = TRUE))) {
+      requireNamespace("userfriendlyscience", quietly = TRUE)
+    )) {
       stop("Package \"userfriendlyscience\" needed to compute reliabilites.",
-           call. = FALSE)
+        call. = FALSE
+      )
     }
     id_vars <- c("session")
-    if ( !all(id_vars %in% names(results))) {
-      stop("For now, the variable session has to index the user ID and earlier ",
-           "rows need to reflect the earlier measurement occasion, so that ",
-           "retest statistics can be computed")
+    if (!all(id_vars %in% names(results))) {
+      stop(
+        "For now, the variable session has to index the user ID and earlier ",
+        "rows need to reflect the earlier measurement occasion, so that ",
+        "retest statistics can be computed"
+      )
     }
 
     t1_items <- results[!duplicated(results$session),
-                        scale_item_names, drop = FALSE]
+      scale_item_names,
+      drop = FALSE
+    ]
     t2_items <- results[duplicated(results$session),
-                        scale_item_names, drop = FALSE]
+      scale_item_names,
+      drop = FALSE
+    ]
 
     list(
       internal_consistency_T1 =
-        internal_consistency(t1_items, paste( scale_name, "Time 1")),
+        internal_consistency(t1_items, paste(scale_name, "Time 1")),
       internal_consistency_T2 =
-        internal_consistency(t2_items, paste( scale_name, "Time 2")),
+        internal_consistency(t2_items, paste(scale_name, "Time 2")),
       retest_reliability = userfriendlyscience::testRetestReliability(
-        testDat = t1_items, retestDat = t2_items)
+        testDat = t1_items, retestDat = t2_items
+      )
     )
-  } else if (survey_repetition == 'repeated_many') {
+  } else if (survey_repetition == "repeated_many") {
     if (!requireNamespace("psych", quietly = TRUE)) {
       stop("Package \"psych\" needed to compute multilevel reliabilites.",
-           call. = FALSE)
+        call. = FALSE
+      )
     }
     id_vars <- c("session", "created")
-    if ( !all(id_vars %in% names(results))) {
-      stop("For now, the variables session and created have to be defined for ",
-           "multilevel reliability computation to work.")
+    if (!all(id_vars %in% names(results))) {
+      stop(
+        "For now, the variables session and created have to be defined for ",
+        "multilevel reliability computation to work."
+      )
     }
-    long_rel <- tidyr::gather(dplyr::select(dplyr::mutate(
-      dplyr::group_by(results, .data$session),
-      day_number = as.numeric(.data$created - min(.data$created), unit = 'days')
-      ), .data$session, .data$day_number,
-      !!!scale_item_names ),
-      "variable", "value", -.data$session, -.data$day_number)
+    long_rel <- tidyr::gather(
+      dplyr::select(
+        dplyr::mutate(
+          dplyr::group_by(results, .data$session),
+          day_number = as.numeric(.data$created - min(.data$created), unit = "days")
+        ), .data$session, .data$day_number,
+        !!!scale_item_names
+      ),
+      "variable", "value", -.data$session, -.data$day_number
+    )
 
     list(
       multilevel_reliability =
         psych::multilevel.reliability(long_rel, "session", "day_number",
-           lme = FALSE, lmer = TRUE, items = "variable", values = "value",
-           long = TRUE, aov = FALSE)
+          lme = FALSE, lmer = TRUE, items = "variable", values = "value",
+          long = TRUE, aov = FALSE
+        )
     )
   }
 }
@@ -161,25 +186,32 @@ pull_reliability <- function(rels) {
     "Not computed"
   } else if (length(rels) == 1 && "alpha" %in% class(rels[[1]])) {
     x <- rels[[1]]
-    paste0("Cronbach's \u03B1 [95% CI] = ", round(x$total$raw_alpha, 2), " [",
-           round(x$total$raw_alpha - 1.96 * x$total$ase, 2), ";",
-           round(x$total$raw_alpha + 1.96 * x$total$ase, 2), "]")
+    paste0(
+      "Cronbach's \u03B1 [95% CI] = ", round(x$total$raw_alpha, 2), " [",
+      round(x$total$raw_alpha - 1.96 * x$total$ase, 2), ";",
+      round(x$total$raw_alpha + 1.96 * x$total$ase, 2), "]"
+    )
   } else if (length(rels) == 1 && "scaleDiagnosis" %in% class(rels[[1]])) {
     coefs <- rels[[1]]$scaleReliability$output$dat
     if (exists("omega.ordinal.ci.lo", coefs)) {
-      paste0("\u03C9<sub>ordinal</sub> [95% CI] = ", round(coefs$omega.ordinal, 2), " [",
-             round(coefs$omega.ordinal.ci.lo, 2), ";",
-             round(coefs$omega.ordinal.ci.hi, 2), "]")
+      paste0(
+        "\u03C9<sub>ordinal</sub> [95% CI] = ", round(coefs$omega.ordinal, 2), " [",
+        round(coefs$omega.ordinal.ci.lo, 2), ";",
+        round(coefs$omega.ordinal.ci.hi, 2), "]"
+      )
     } else if (exists("omega.ci.lo", coefs)) {
-      paste0("\u03C9<sub>total</sub> [95% CI] = ", round(coefs$omega, 2), " [",
-             round(coefs$omega.ci.lo, 2), ";",
-             round(coefs$omega.ci.hi, 2), "]")
+      paste0(
+        "\u03C9<sub>total</sub> [95% CI] = ", round(coefs$omega, 2), " [",
+        round(coefs$omega.ci.lo, 2), ";",
+        round(coefs$omega.ci.hi, 2), "]"
+      )
     } else if (exists("omega", coefs)) {
-      paste0("\u03C9<sub>total</sub> [95% CI] = ", round(coefs$omega, 2),
-             " [not computed]")
+      paste0(
+        "\u03C9<sub>total</sub> [95% CI] = ", round(coefs$omega, 2),
+        " [not computed]"
+      )
     }
   } else {
     "See details tab"
   }
-
 }
